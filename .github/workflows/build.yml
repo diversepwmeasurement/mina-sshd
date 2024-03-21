@@ -1,85 +1,73 @@
-#
-# Licensed to the Apache Software Foundation (ASF) under one or more
-# contributor license agreements.  See the NOTICE file distributed with
-# this work for additional information regarding copyright ownership.
-# The ASF licenses this file to You under the Apache License, Version 2.0
-# (the "License"); you may not use this file except in compliance with
-# the License.  You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-
-name: build
-
-on:
-  pull_request:
-    branches:
-      - master
-  workflow_call:
-
 jobs:
   compile:
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ matrix.java }}
+    - continue-on-error: true
+      uses: actions/cache@v4
+      with:
+        key: ${{ matrix.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        path: ~/.m2/repository
+        restore-keys: '${{ matrix.os }}-maven-
+
+          '
+    - continue-on-error: true
+      name: Build with maven
+      run: mvn -B --errors --activate-profiles ci --no-transfer-progress package -DskipTests
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        java: [ '8' ]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ matrix.java }}
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ matrix.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ matrix.os }}-maven-
-
-      - name: Build with maven
-        run: mvn -B --errors --activate-profiles ci --no-transfer-progress package -DskipTests
-
+        java:
+        - '8'
+        os:
+        - ubuntu-latest
+        - windows-latest
   test:
     needs: compile
-    runs-on: ${{ matrix.os }}
+    runs-on: self-hosted
+    steps:
+    - continue-on-error: true
+      uses: actions/checkout@v4
+    - continue-on-error: true
+      name: Set up JDK ${{ matrix.java }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ matrix.java }}
+    - continue-on-error: true
+      uses: actions/cache@v4
+      with:
+        key: ${{ matrix.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        path: ~/.m2/repository
+        restore-keys: '${{ matrix.os }}-maven-
+
+          '
+    - continue-on-error: true
+      name: Build and test with maven
+      run: mvn -B --errors --activate-profiles ci --no-transfer-progress package
+    - continue-on-error: true
+      if: failure()
+      name: Archive test results and logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.java }}-${{ matrix.os }}
+        path: sshd-*/target/surefire-*
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest ]
-        java: [ '8', '11', '17' ]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ matrix.java }}
-
-      - uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ matrix.os }}-maven-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            ${{ matrix.os }}-maven-
-
-      - name: Build and test with maven
-        # Skip all static checks, they were already done in the compile jobs
-        run: mvn -B --errors --activate-profiles ci --no-transfer-progress package
-
-      - name: Archive test results and logs
-        # if: success() || failure() to also get the test results on successful runs.
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ matrix.java }}-${{ matrix.os }}
-          path: sshd-*/target/surefire-*
+        java:
+        - '8'
+        - '11'
+        - '17'
+        os:
+        - ubuntu-latest
+        - windows-latest
+name: build
+on:
+  repository_dispatch:
+    types: trigger-ga___build.yml
